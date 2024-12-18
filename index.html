@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Barcode Generator</title>
+    <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 0;
+            min-height: 100vh;
+            background-color: #f4f4f4;
+            padding-top: 50px;
+        }
+        h1 {
+            margin-bottom: 20px;
+            color: #333;
+        }
+        label, input, button, span {
+            margin-bottom: 10px;
+        }
+        input {
+            padding: 10px;
+            font-size: 16px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            transition: border-color 0.3s, box-shadow 0.3s;
+        }
+        input:focus {
+            border-color: #28a745;
+            box-shadow: 0 0 10px #28a745;
+        }
+        button {
+            padding: 10px 20px;
+            font-size: 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #28a745;
+            color: #fff;
+            transition: transform 0.3s ease-in-out, background-color 0.3s;
+        }
+        button:hover {
+            background-color: #218838;
+            transform: scale(1.05);
+        }
+        #download-link {
+            margin-top: 20px;
+        }
+        svg {
+            margin-top: 30px;
+            background-color: #fff;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            transition: transform 0.3s ease-in-out;
+        }
+        svg:hover {
+            transform: scale(1.05);
+        }
+        #checksum-display {
+            margin-top: 10px;
+            font-size: 16px;
+            color: #333;
+        }
+    </style>
+</head>
+<body>
+    <h1>EAN-13 Barcode Generator</h1>
+    
+    <label for="barcode-input">Enter EAN-13 Code (first 12 digits):</label>
+    <input type="text" id="barcode-input" value="471307706632" maxlength="12" oninput="calculateChecksum()" onkeydown="handleEnter(event)">
+    <button onclick="generateBarcode()">Generate Barcode</button>
+    <a id="download-link" download="barcode.svg" style="display:none;">
+        <button>Download SVG</button>
+    </a>
+    <span id="checksum-display"></span>
+    
+    <svg id="barcode"></svg>
+    
+    <script>
+        function handleEnter(event) {
+            if(event.key === "Enter") {
+                generateBarcode();
+            }
+        }
+        
+        function calculateChecksum() {
+            var input = document.getElementById("barcode-input").value;
+            if(input.length === 12) {
+                var sum = 0;
+                for(var i = 0; i < 12; i++) {
+                    var digit = parseInt(input[i]);
+                    sum += i % 2 === 0 ? digit : digit * 3;
+                }
+                var mod = sum % 10;
+                var checksum = mod === 0 ? 0 : 10 - mod;
+                document.getElementById("checksum-display").textContent = "Checksum: " + checksum;
+            } else {
+                document.getElementById("checksum-display").textContent = "";
+            }
+        }
+        
+        function generateBarcode() {
+            var input = document.getElementById("barcode-input").value;
+            if(input.length === 12) {
+                var sum = 0;
+                for(var i = 0; i < 12; i++) {
+                    var digit = parseInt(input[i]);
+                    sum += i % 2 === 0 ? digit : digit * 3;
+                }
+                var mod = sum % 10;
+                var checksum = mod === 0 ? 0 : 10 - mod;
+                input += checksum;
+            }
+            
+            var svgElement = document.getElementById("barcode");
+            
+            JsBarcode(svgElement, input, {
+                format: "EAN13",
+                displayValue: false,
+                fontSize: 18
+            });
+            
+            var textElement = document.createElementNS("http://www.w3.org/2000/svg", "text");
+            textElement.setAttribute("y", "125");
+            textElement.setAttribute("font-size", "18");
+            
+            var unitWidth = svgElement.getBBox().width / 95;
+            
+            var positions = [
+                0,
+                10, 16, 22, 28, 34, 
+                40,
+                51, 57, 63, 69, 75, 
+                81
+            ];
+            
+            for (var i = 0; i < input.length; i++) {
+                var tspan = document.createElementNS("http://www.w3.org/2000/svg", "tspan");
+                tspan.setAttribute("x", positions[i] * unitWidth);
+                tspan.textContent = input[i];
+                textElement.appendChild(tspan);
+            }
+            
+            svgElement.appendChild(textElement);
+            
+            var serializer = new XMLSerializer();
+            var svgString = serializer.serializeToString(svgElement);
+            var blob = new Blob([svgString], {type: "image/svg+xml"});
+            var url = URL.createObjectURL(blob);
+            
+            var downloadLink = document.getElementById("download-link");
+            downloadLink.href = url;
+            downloadLink.style.display = "inline";
+        }
+    </script>
+</body>
+</html>
