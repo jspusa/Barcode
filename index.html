@@ -54,7 +54,9 @@
         }
         #checksum-display {
             margin-top: 10px;
+            margin-bottom: 10px;
             color: #2d3748;
+            display: block;
         }
         footer {
             margin-top: 40px;
@@ -72,7 +74,7 @@
             <button onclick="generateBarcode()">產生條碼</button>
             <a id="download-link" download="barcode.svg" style="display:none;"><button>下載 SVG</button></a>
         </div>
-        <span id="checksum-display"></span>
+        <div id="checksum-display"></div>
         <svg id="barcode"></svg>
         <footer>Generated with JsBarcode</footer>
     </div>
