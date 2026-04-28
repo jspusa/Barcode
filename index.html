@@ -7,7 +7,6 @@
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
     <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.0/dist/JsBarcode.all.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.min.js"></script>
     <style>
         body {
             font-family: 'Noto Sans TC', sans-serif;
@@ -75,43 +74,51 @@
         <div>
             <button onclick="generateBarcode()">產生條碼</button>
             <a id="download-link" download="barcode.svg" style="display:none;"><button>下載 SVG</button></a>
-            <button id="download-pdf-button" onclick="downloadLabelPdf()" style="display:none;">下載 4x6 標籤 PDF（11x35mm）</button>
         </div>
         <hr style="margin: 24px 0;" />
-        <div>
-            <div style="margin-bottom: 10px;">自訂檔案排版到 4x6（102mm x 152mm）</div>
-            <input id="custom-file-input" type="file" accept=".png,.jpg,.jpeg,.webp,.svg,.ai,image/*" style="width:auto;margin-bottom:10px;" />
-            <div style="margin-bottom: 10px;">
-                <label for="use-custom-size">
-                    <input id="use-custom-size" type="checkbox" onchange="toggleCustomSizeMode()" />
-                    啟用自訂尺寸
-                </label>
+        <div style="text-align:left;max-width:520px;margin:0 auto 8px;">
+            <div style="margin-bottom: 10px;">下載 4x6 標籤 PDF（102mm x 152mm）</div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <label for="label-width-mm">寬(mm)</label>
+                <input id="label-width-mm" type="number" min="5" max="102" step="0.1" placeholder="例如 35" value="35" style="width:90px;margin:0;" oninput="onLabelSettingsChanged()" />
+                <label for="label-height-mm">高(mm)</label>
+                <input id="label-height-mm" type="number" min="5" max="152" step="0.1" placeholder="例如 11" value="11" style="width:90px;margin:0;" oninput="onLabelSettingsChanged()" />
+            </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>條碼內縮</span>
+                <button type="button" onclick="adjustBarcodeInset(0.2)">－</button>
+                <span id="barcode-inset-display">0.6 mm</span>
+                <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
+                <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
+            </div>
+            <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
+                目前可排版：<span id="layout-count-preview">0 欄 × 0 列</span>
             </div>
             <div style="margin-bottom: 10px;">
-                <label for="custom-width-mm">寬(mm)</label>
-                <input id="custom-width-mm" type="number" min="1" step="0.1" style="width:90px;margin:0 8px;" disabled />
-                <label for="custom-height-mm">高(mm)</label>
-                <input id="custom-height-mm" type="number" min="1" step="0.1" style="width:90px;margin-left:8px;" disabled />
-                <button id="preset-11x35-button" type="button" onclick="setPresetStickerSize()" style="margin-left:8px;display:none;">套用 11x35</button>
+                <button id="download-pdf-button" onclick="downloadLabelPdf()" style="display:none;">下載 4x6 標籤 PDF</button>
             </div>
-            <button onclick="downloadCustomLayoutPdf()">上傳檔案並排版成 4x6 PDF</button>
+            <div style="font-size:12px;color:#4a5568;margin-bottom:6px;">預覽（外框為貼紙尺寸）</div>
+            <div id="label-preview-shell" style="border:1px dashed #a0aec0;background:#f7fafc;padding:12px;width:max-content;">
+                <div id="label-preview-box" style="width:210px;height:66px;background:#fff;border:1px solid #2d3748;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                    <img id="label-preview-image" alt="條碼預覽" style="max-width:100%;max-height:100%;object-fit:contain;display:none;" />
+                    <span id="label-preview-placeholder" style="font-size:12px;color:#a0aec0;">先按「產生條碼」</span>
+                </div>
+            </div>
         </div>
         <div id="checksum-display"></div>
         <svg id="barcode"></svg>
         <footer>Generated with JsBarcode</footer>
     </div>
 <script>
-if (window.pdfjsLib && window.pdfjsLib.GlobalWorkerOptions) {
-    window.pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdn.jsdelivr.net/npm/pdfjs-dist@4.5.136/build/pdf.worker.min.js';
-}
+const PAGE_WIDTH_MM = 102;
+const PAGE_HEIGHT_MM = 152;
+const DEFAULT_INSET_MM = 0.6;
+let currentBarcodePngDataUrl = '';
+let barcodeInsetMm = DEFAULT_INSET_MM;
+
 window.addEventListener('DOMContentLoaded', () => {
-    document.getElementById('custom-file-input').addEventListener('change', async (event) => {
-        const file = event.target.files && event.target.files[0];
-        if (!file) {
-            return;
-        }
-        await applyAutoDetectedSize(file);
-    });
+    updateInsetDisplay();
+    onLabelSettingsChanged();
 });
 function handleEnter(e) {
     if(e.key === 'Enter') {
@@ -141,6 +148,13 @@ function generateBarcode() {
     renderBarcode(input);
     const serializer = new XMLSerializer();
     const svg = document.getElementById('barcode');
+    const label = getValidatedLabelSize(true);
+    if (label) {
+        svgToCroppedPngDataUrl(svg, label.widthMm, label.heightMm).then((pngDataUrl) => {
+            currentBarcodePngDataUrl = pngDataUrl;
+            renderLabelPreview();
+        });
+    }
     const url = URL.createObjectURL(new Blob([serializer.serializeToString(svg)], { type: 'image/svg+xml' }));
     const link = document.getElementById('download-link');
     link.href = url;
@@ -213,31 +227,38 @@ async function downloadLabelPdf() {
         alert('請輸入 12 位數字');
         return;
     }
+    const label = getValidatedLabelSize(true);
+    if (!label) {
+        return;
+    }
     renderBarcode(input);
     const svg = document.getElementById('barcode');
     const { jsPDF } = window.jspdf;
-    const pageWidth = 102;
-    const pageHeight = 152;
-    const barcodeWidth = 35;
-    const barcodeHeight = 11;
+    const barcodeWidth = label.widthMm;
+    const barcodeHeight = label.heightMm;
     const pngDataUrl = await svgToCroppedPngDataUrl(svg, barcodeWidth, barcodeHeight);
+    currentBarcodePngDataUrl = pngDataUrl;
+    renderLabelPreview();
     const gap = 0;
     const marginX = 0;
     const marginY = 0;
-    const cols = Math.floor((pageWidth - marginX * 2 + gap) / (barcodeWidth + gap));
-    const rows = Math.floor((pageHeight - marginY * 2 + gap) / (barcodeHeight + gap));
+    const cols = Math.floor((PAGE_WIDTH_MM - marginX * 2 + gap) / (barcodeWidth + gap));
+    const rows = Math.floor((PAGE_HEIGHT_MM - marginY * 2 + gap) / (barcodeHeight + gap));
+    if (cols <= 0 || rows <= 0) {
+        alert('尺寸太大，4x6 標籤紙放不下，請調整寬高');
+        return;
+    }
     const pdf = new jsPDF({
         orientation: 'portrait',
         unit: 'mm',
-        format: [pageWidth, pageHeight]
+        format: [PAGE_WIDTH_MM, PAGE_HEIGHT_MM]
     });
     pdf.setDrawColor(0, 0, 0);
     pdf.setLineWidth(0.2);
-    const safePaddingX = 0.6;
-    const safePaddingTop = 0.4;
-    const safePaddingBottom = 1.0;
-    const imageWidth = Math.max(1, barcodeWidth - safePaddingX * 2);
-    const imageHeight = Math.max(1, barcodeHeight - safePaddingTop - safePaddingBottom);
+    const maxInset = getMaxInset(barcodeWidth, barcodeHeight);
+    const safeInset = Math.min(Math.max(barcodeInsetMm, 0), maxInset);
+    const imageWidth = Math.max(1, barcodeWidth - safeInset * 2);
+    const imageHeight = Math.max(1, barcodeHeight - safeInset * 2);
     for (let row = 0; row < rows; row++) {
         for (let col = 0; col < cols; col++) {
             const x = marginX + col * (barcodeWidth + gap);
@@ -245,8 +266,8 @@ async function downloadLabelPdf() {
             pdf.addImage(
                 pngDataUrl,
                 'PNG',
-                x + safePaddingX,
-                y + safePaddingTop,
+                x + safeInset,
+                y + safeInset,
                 imageWidth,
                 imageHeight,
                 undefined,
@@ -257,187 +278,77 @@ async function downloadLabelPdf() {
     }
     pdf.save(`barcode-4x6-${input}.pdf`);
 }
-function toggleCustomSizeMode() {
-    const enabled = document.getElementById('use-custom-size').checked;
-    const widthInput = document.getElementById('custom-width-mm');
-    const heightInput = document.getElementById('custom-height-mm');
-    widthInput.disabled = !enabled;
-    heightInput.disabled = !enabled;
-    document.getElementById('preset-11x35-button').style.display = enabled ? 'inline-block' : 'none';
-}
-function setPresetStickerSize() {
-    document.getElementById('custom-width-mm').value = '35';
-    document.getElementById('custom-height-mm').value = '11';
-}
-function fileToDataUrl(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsDataURL(file);
-    });
-}
-function fileToArrayBuffer(file) {
-    return new Promise((resolve, reject) => {
-        const reader = new FileReader();
-        reader.onload = () => resolve(reader.result);
-        reader.onerror = reject;
-        reader.readAsArrayBuffer(file);
-    });
-}
-function dataUrlToPngDataUrl(dataUrl) {
-    return new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => {
-            const canvas = document.createElement('canvas');
-            canvas.width = image.width;
-            canvas.height = image.height;
-            const ctx = canvas.getContext('2d');
-            ctx.fillStyle = '#ffffff';
-            ctx.fillRect(0, 0, canvas.width, canvas.height);
-            ctx.drawImage(image, 0, 0);
-            resolve(canvas.toDataURL('image/png'));
-        };
-        image.onerror = reject;
-        image.src = dataUrl;
-    });
-}
-function extractPdfBytesFromAi(arrayBuffer) {
-    const bytes = new Uint8Array(arrayBuffer);
-    const pdfHeader = [0x25, 0x50, 0x44, 0x46, 0x2d]; // %PDF-
-    let headerIndex = -1;
-    for (let i = 0; i <= bytes.length - pdfHeader.length; i++) {
-        let matched = true;
-        for (let j = 0; j < pdfHeader.length; j++) {
-            if (bytes[i + j] !== pdfHeader[j]) {
-                matched = false;
-                break;
-            }
+function getValidatedLabelSize(showAlert = false) {
+    const widthMm = parseFloat(document.getElementById('label-width-mm').value);
+    const heightMm = parseFloat(document.getElementById('label-height-mm').value);
+    if (!widthMm || !heightMm || widthMm <= 0 || heightMm <= 0 || widthMm > PAGE_WIDTH_MM || heightMm > PAGE_HEIGHT_MM) {
+        if (showAlert) {
+            alert(`請輸入有效尺寸，寬高需在 0 ~ ${PAGE_WIDTH_MM}/${PAGE_HEIGHT_MM} mm 範圍內`);
         }
-        if (matched) {
-            headerIndex = i;
-            break;
-        }
+        return null;
     }
-    if (headerIndex === -1) {
-        throw new Error('找不到 PDF 內容');
-    }
-    return bytes.slice(headerIndex);
+    return { widthMm, heightMm };
 }
-async function aiFileToPngDataUrl(file) {
-    if (!window.pdfjsLib) {
-        throw new Error('PDF 解析器尚未載入完成');
-    }
-    const arrayBuffer = await fileToArrayBuffer(file);
-    const pdfBytes = extractPdfBytesFromAi(arrayBuffer);
-    const loadingTask = window.pdfjsLib.getDocument({ data: pdfBytes });
-    const pdf = await loadingTask.promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale: 2.5 });
-    const canvas = document.createElement('canvas');
-    canvas.width = Math.ceil(viewport.width);
-    canvas.height = Math.ceil(viewport.height);
-    const ctx = canvas.getContext('2d');
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    await page.render({ canvasContext: ctx, viewport }).promise;
-    return canvas.toDataURL('image/png');
+function updateInsetDisplay() {
+    document.getElementById('barcode-inset-display').textContent = `${barcodeInsetMm.toFixed(1)} mm`;
 }
-async function getFileNaturalSizePx(file) {
-    const fileName = (file.name || '').toLowerCase();
-    if (fileName.endsWith('.ai')) {
-        const arrayBuffer = await fileToArrayBuffer(file);
-        const pdfBytes = extractPdfBytesFromAi(arrayBuffer);
-        const loadingTask = window.pdfjsLib.getDocument({ data: pdfBytes });
-        const pdf = await loadingTask.promise;
-        const page = await pdf.getPage(1);
-        const viewport = page.getViewport({ scale: 1 });
-        return {
-            widthPx: viewport.width * (96 / 72),
-            heightPx: viewport.height * (96 / 72)
-        };
-    }
-    const rawDataUrl = await fileToDataUrl(file);
-    return await new Promise((resolve, reject) => {
-        const image = new Image();
-        image.onload = () => resolve({ widthPx: image.width, heightPx: image.height });
-        image.onerror = reject;
-        image.src = rawDataUrl;
-    });
+function getMaxInset(widthMm, heightMm) {
+    return Math.max(0, Math.min(widthMm, heightMm) / 2 - 0.5);
 }
-async function applyAutoDetectedSize(file) {
-    const widthInput = document.getElementById('custom-width-mm');
-    const heightInput = document.getElementById('custom-height-mm');
-    try {
-        const naturalSize = await getFileNaturalSizePx(file);
-        const mmPerPx = 25.4 / 96;
-        widthInput.value = (naturalSize.widthPx * mmPerPx).toFixed(1);
-        heightInput.value = (naturalSize.heightPx * mmPerPx).toFixed(1);
-    } catch (error) {
-        widthInput.value = '';
-        heightInput.value = '';
-    }
-}
-async function downloadCustomLayoutPdf() {
-    const fileInput = document.getElementById('custom-file-input');
-    if (!fileInput.files || fileInput.files.length === 0) {
-        alert('請先選擇要排版的檔案');
+function adjustBarcodeInset(delta) {
+    const label = getValidatedLabelSize();
+    if (!label) {
         return;
     }
-    let widthMm = parseFloat(document.getElementById('custom-width-mm').value);
-    let heightMm = parseFloat(document.getElementById('custom-height-mm').value);
-    if (!widthMm || !heightMm) {
-        await applyAutoDetectedSize(fileInput.files[0]);
-        widthMm = parseFloat(document.getElementById('custom-width-mm').value);
-        heightMm = parseFloat(document.getElementById('custom-height-mm').value);
-    }
-    if (!widthMm || !heightMm || widthMm <= 0 || heightMm <= 0) {
-        alert('無法取得尺寸，請改勾選「啟用自訂尺寸」後手動輸入，或點「套用 11x35」。');
+    const maxInset = getMaxInset(label.widthMm, label.heightMm);
+    const nextInset = Math.min(maxInset, Math.max(0, barcodeInsetMm + delta));
+    barcodeInsetMm = Math.round(nextInset * 10) / 10;
+    updateInsetDisplay();
+    renderLabelPreview();
+}
+function onLabelSettingsChanged() {
+    const label = getValidatedLabelSize();
+    const layoutEl = document.getElementById('layout-count-preview');
+    if (!label) {
+        layoutEl.textContent = '0 欄 × 0 列';
+        renderLabelPreview();
         return;
     }
-    const file = fileInput.files[0];
-    const fileName = (file.name || '').toLowerCase();
-    let dataUrl;
-    if (fileName.endsWith('.ai')) {
-        try {
-            dataUrl = await aiFileToPngDataUrl(file);
-        } catch (error) {
-            alert('AI 轉 PNG 失敗：請確認檔案為 PDF 相容的 AI，或改上傳 SVG/PNG。');
-            return;
-        }
-    } else {
-        const rawDataUrl = await fileToDataUrl(file);
-        dataUrl = await dataUrlToPngDataUrl(rawDataUrl);
+    const cols = Math.floor(PAGE_WIDTH_MM / label.widthMm);
+    const rows = Math.floor(PAGE_HEIGHT_MM / label.heightMm);
+    layoutEl.textContent = `${cols} 欄 × ${rows} 列`;
+    const maxInset = getMaxInset(label.widthMm, label.heightMm);
+    if (barcodeInsetMm > maxInset) {
+        barcodeInsetMm = Math.round(maxInset * 10) / 10;
+        updateInsetDisplay();
     }
-    const pageWidth = 102;
-    const pageHeight = 152;
-    const gap = 0;
-    const marginX = 0;
-    const marginY = 0;
-    const cols = Math.floor((pageWidth - marginX * 2 + gap) / (widthMm + gap));
-    const rows = Math.floor((pageHeight - marginY * 2 + gap) / (heightMm + gap));
-    if (cols <= 0 || rows <= 0) {
-        alert('尺寸太大，4x6 標籤紙放不下，請調整寬高');
+    renderLabelPreview();
+}
+function renderLabelPreview() {
+    const previewBox = document.getElementById('label-preview-box');
+    const previewImage = document.getElementById('label-preview-image');
+    const placeholder = document.getElementById('label-preview-placeholder');
+    const label = getValidatedLabelSize();
+    if (!label) {
+        placeholder.textContent = '請輸入有效寬高';
+        placeholder.style.display = 'block';
+        previewImage.style.display = 'none';
         return;
     }
-    const { jsPDF } = window.jspdf;
-    const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: [pageWidth, pageHeight]
-    });
-    pdf.setDrawColor(0, 0, 0);
-    pdf.setLineWidth(0.2);
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            const x = marginX + col * (widthMm + gap);
-            const y = marginY + row * (heightMm + gap);
-            pdf.addImage(dataUrl, 'PNG', x, y, widthMm, heightMm, undefined, 'FAST');
-            pdf.rect(x, y, widthMm, heightMm);
-        }
+    const pxPerMm = 6;
+    previewBox.style.width = `${Math.round(label.widthMm * pxPerMm)}px`;
+    previewBox.style.height = `${Math.round(label.heightMm * pxPerMm)}px`;
+    const insetPx = Math.round(barcodeInsetMm * pxPerMm);
+    previewImage.style.padding = `${insetPx}px`;
+    if (!currentBarcodePngDataUrl) {
+        placeholder.textContent = '先按「產生條碼」';
+        placeholder.style.display = 'block';
+        previewImage.style.display = 'none';
+        return;
     }
-    const safeName = (file.name || 'custom').replace(/\.[^.]+$/, '');
-    pdf.save(`layout-4x6-${safeName}.pdf`);
+    previewImage.src = currentBarcodePngDataUrl;
+    previewImage.style.display = 'block';
+    placeholder.style.display = 'none';
 }
 function addHumanReadableText(svg, code) {
     const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
