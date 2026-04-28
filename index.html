@@ -260,6 +260,13 @@ async function downloadLabelPdf() {
     const safeInset = Math.min(Math.max(barcodeInsetMm, 0), maxInset);
     const imageWidth = Math.max(1, barcodeWidth - safeInset * 2);
     const imageHeight = Math.max(1, barcodeHeight - safeInset * 2);
+    const normalImageSize = await getImageSizeFromDataUrl(pngDataUrl);
+    const normalPlacement = getContainPlacement(
+        normalImageSize.width,
+        normalImageSize.height,
+        imageWidth,
+        imageHeight
+    );
     for (let row = 0; row < layoutPlan.portraitRows; row++) {
         for (let col = 0; col < layoutPlan.portraitCols; col++) {
             const x = marginX + col * barcodeWidth;
@@ -267,10 +274,10 @@ async function downloadLabelPdf() {
             pdf.addImage(
                 pngDataUrl,
                 'PNG',
-                x + safeInset,
-                y + safeInset,
-                imageWidth,
-                imageHeight,
+                x + safeInset + normalPlacement.offsetX,
+                y + safeInset + normalPlacement.offsetY,
+                normalPlacement.drawWidth,
+                normalPlacement.drawHeight,
                 undefined,
                 'FAST'
             );
@@ -283,6 +290,13 @@ async function downloadLabelPdf() {
         const rotatedHeight = barcodeWidth;
         const rotatedImageWidth = Math.max(1, rotatedWidth - safeInset * 2);
         const rotatedImageHeight = Math.max(1, rotatedHeight - safeInset * 2);
+        const rotatedImageSize = await getImageSizeFromDataUrl(rotatedPngDataUrl);
+        const rotatedPlacement = getContainPlacement(
+            rotatedImageSize.width,
+            rotatedImageSize.height,
+            rotatedImageWidth,
+            rotatedImageHeight
+        );
         for (let row = 0; row < layoutPlan.landscapeRows; row++) {
             for (let col = 0; col < layoutPlan.landscapeCols; col++) {
                 const x = layoutPlan.landscapeStartX + col * rotatedWidth;
@@ -290,10 +304,10 @@ async function downloadLabelPdf() {
                 pdf.addImage(
                     rotatedPngDataUrl,
                     'PNG',
-                    x + safeInset,
-                    y + safeInset,
-                    rotatedImageWidth,
-                    rotatedImageHeight,
+                    x + safeInset + rotatedPlacement.offsetX,
+                    y + safeInset + rotatedPlacement.offsetY,
+                    rotatedPlacement.drawWidth,
+                    rotatedPlacement.drawHeight,
                     undefined,
                     'FAST'
                 );
@@ -321,6 +335,31 @@ function rotatePngDataUrl90(dataUrl) {
         image.onerror = reject;
         image.src = dataUrl;
     });
+}
+function getImageSizeFromDataUrl(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => resolve({ width: image.width, height: image.height });
+        image.onerror = reject;
+        image.src = dataUrl;
+    });
+}
+function getContainPlacement(sourceWidth, sourceHeight, boxWidth, boxHeight) {
+    const sourceRatio = sourceWidth / sourceHeight;
+    const boxRatio = boxWidth / boxHeight;
+    let drawWidth = boxWidth;
+    let drawHeight = boxHeight;
+    if (sourceRatio > boxRatio) {
+        drawHeight = boxWidth / sourceRatio;
+    } else {
+        drawWidth = boxHeight * sourceRatio;
+    }
+    return {
+        drawWidth,
+        drawHeight,
+        offsetX: (boxWidth - drawWidth) / 2,
+        offsetY: (boxHeight - drawHeight) / 2
+    };
 }
 function getValidatedLabelSize(showAlert = false) {
     const widthMm = parseFloat(document.getElementById('label-width-mm').value);
