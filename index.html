@@ -87,7 +87,7 @@
             <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span>條碼內縮</span>
                 <button type="button" onclick="adjustBarcodeInset(0.2)">－</button>
-                <span id="barcode-inset-display">0.6 mm</span>
+                <span id="barcode-inset-display">0.8 mm</span>
                 <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
                 <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
             </div>
@@ -114,7 +114,8 @@
 <script>
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
-const DEFAULT_INSET_MM = 0.6;
+const DEFAULT_INSET_MM = 0.8;
+const MIXED_LAYOUT_GAP_MM = 0.6;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
 
@@ -241,12 +242,10 @@ async function downloadLabelPdf() {
     const pngDataUrl = await svgToCroppedPngDataUrl(svg, barcodeWidth, barcodeHeight);
     currentBarcodePngDataUrl = pngDataUrl;
     renderLabelPreview();
-    const gap = 0;
     const marginX = 0;
     const marginY = 0;
-    const cols = Math.floor((PAGE_WIDTH_MM - marginX * 2 + gap) / (barcodeWidth + gap));
-    const rows = Math.floor((PAGE_HEIGHT_MM - marginY * 2 + gap) / (barcodeHeight + gap));
-    if (cols <= 0 || rows <= 0) {
+    const layoutPlan = getLayoutPlan(barcodeWidth, barcodeHeight);
+    if (layoutPlan.totalCount <= 0) {
         alert('尺寸太大，4x6 標籤紙放不下，請調整寬高');
         return;
     }
@@ -261,10 +260,10 @@ async function downloadLabelPdf() {
     const safeInset = Math.min(Math.max(barcodeInsetMm, 0), maxInset);
     const imageWidth = Math.max(1, barcodeWidth - safeInset * 2);
     const imageHeight = Math.max(1, barcodeHeight - safeInset * 2);
-    for (let row = 0; row < rows; row++) {
-        for (let col = 0; col < cols; col++) {
-            const x = marginX + col * (barcodeWidth + gap);
-            const y = marginY + row * (barcodeHeight + gap);
+    for (let row = 0; row < layoutPlan.portraitRows; row++) {
+        for (let col = 0; col < layoutPlan.portraitCols; col++) {
+            const x = marginX + col * barcodeWidth;
+            const y = marginY + row * barcodeHeight;
             pdf.addImage(
                 pngDataUrl,
                 'PNG',
@@ -278,7 +277,50 @@ async function downloadLabelPdf() {
             pdf.rect(x, y, barcodeWidth, barcodeHeight);
         }
     }
+    if (layoutPlan.landscapeCols > 0 && layoutPlan.landscapeRows > 0) {
+        const rotatedPngDataUrl = await rotatePngDataUrl90(pngDataUrl);
+        const rotatedWidth = barcodeHeight;
+        const rotatedHeight = barcodeWidth;
+        const rotatedImageWidth = Math.max(1, rotatedWidth - safeInset * 2);
+        const rotatedImageHeight = Math.max(1, rotatedHeight - safeInset * 2);
+        for (let row = 0; row < layoutPlan.landscapeRows; row++) {
+            for (let col = 0; col < layoutPlan.landscapeCols; col++) {
+                const x = layoutPlan.landscapeStartX + col * rotatedWidth;
+                const y = row * rotatedHeight;
+                pdf.addImage(
+                    rotatedPngDataUrl,
+                    'PNG',
+                    x + safeInset,
+                    y + safeInset,
+                    rotatedImageWidth,
+                    rotatedImageHeight,
+                    undefined,
+                    'FAST'
+                );
+                pdf.rect(x, y, rotatedWidth, rotatedHeight);
+            }
+        }
+    }
     pdf.save(`barcode-4x6-${input}.pdf`);
+}
+function rotatePngDataUrl90(dataUrl) {
+    return new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+            const canvas = document.createElement('canvas');
+            canvas.width = image.height;
+            canvas.height = image.width;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(Math.PI / 2);
+            ctx.drawImage(image, -image.width / 2, -image.height / 2);
+            resolve(canvas.toDataURL('image/png'));
+        };
+        image.onerror = reject;
+        image.src = dataUrl;
+    });
 }
 function getValidatedLabelSize(showAlert = false) {
     const widthMm = parseFloat(document.getElementById('label-width-mm').value);
@@ -316,15 +358,45 @@ function onLabelSettingsChanged() {
         renderLabelPreview();
         return;
     }
-    const cols = Math.floor(PAGE_WIDTH_MM / label.widthMm);
-    const rows = Math.floor(PAGE_HEIGHT_MM / label.heightMm);
-    layoutEl.textContent = `${cols} 欄 × ${rows} 列`;
+    const plan = getLayoutPlan(label.widthMm, label.heightMm);
+    if (plan.landscapeCols > 0 && plan.landscapeRows > 0) {
+        layoutEl.textContent = `${plan.portraitCols} 欄 × ${plan.portraitRows} 列 + 橫式 ${plan.landscapeCols} 欄 × ${plan.landscapeRows} 列（總共 ${plan.totalCount} 張）`;
+    } else {
+        layoutEl.textContent = `${plan.portraitCols} 欄 × ${plan.portraitRows} 列（總共 ${plan.totalCount} 張）`;
+    }
     const maxInset = getMaxInset(label.widthMm, label.heightMm);
     if (barcodeInsetMm > maxInset) {
         barcodeInsetMm = Math.round(maxInset * 10) / 10;
         updateInsetDisplay();
     }
     renderLabelPreview();
+}
+function getLayoutPlan(widthMm, heightMm) {
+    const portraitCols = Math.floor(PAGE_WIDTH_MM / widthMm);
+    const portraitRows = Math.floor(PAGE_HEIGHT_MM / heightMm);
+    let landscapeCols = 0;
+    let landscapeRows = 0;
+    let landscapeStartX = 0;
+    if (portraitCols > 0 && portraitRows > 0) {
+        const usedWidth = portraitCols * widthMm;
+        const remainWidth = PAGE_WIDTH_MM - usedWidth;
+        if (remainWidth > MIXED_LAYOUT_GAP_MM + heightMm) {
+            const laneWidth = remainWidth - MIXED_LAYOUT_GAP_MM;
+            landscapeCols = Math.floor(laneWidth / heightMm);
+            landscapeRows = Math.floor(PAGE_HEIGHT_MM / widthMm);
+            if (landscapeCols > 0 && landscapeRows > 0) {
+                landscapeStartX = usedWidth + MIXED_LAYOUT_GAP_MM;
+            } else {
+                landscapeCols = 0;
+                landscapeRows = 0;
+            }
+        }
+    } else {
+        landscapeCols = Math.floor(PAGE_WIDTH_MM / heightMm);
+        landscapeRows = Math.floor(PAGE_HEIGHT_MM / widthMm);
+    }
+    const totalCount = portraitCols * portraitRows + landscapeCols * landscapeRows;
+    return { portraitCols, portraitRows, landscapeCols, landscapeRows, landscapeStartX, totalCount };
 }
 function renderLabelPreview() {
     const previewBox = document.getElementById('label-preview-box');
