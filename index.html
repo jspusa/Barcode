@@ -205,9 +205,9 @@ async function downloadLabelPdf() {
     const barcodeWidth = 35;
     const barcodeHeight = 11;
     const pngDataUrl = await svgToCroppedPngDataUrl(svg, barcodeWidth, barcodeHeight);
-    const gap = 2;
-    const marginX = 3;
-    const marginY = 3;
+    const gap = 0;
+    const marginX = 0;
+    const marginY = 0;
     const cols = Math.floor((pageWidth - marginX * 2 + gap) / (barcodeWidth + gap));
     const rows = Math.floor((pageHeight - marginY * 2 + gap) / (barcodeHeight + gap));
     const pdf = new jsPDF({
@@ -306,9 +306,9 @@ async function downloadCustomLayoutPdf() {
     }
     const pageWidth = 102;
     const pageHeight = 152;
-    const gap = 2;
-    const marginX = 3;
-    const marginY = 3;
+    const gap = 0;
+    const marginX = 0;
+    const marginY = 0;
     const cols = Math.floor((pageWidth - marginX * 2 + gap) / (widthMm + gap));
     const rows = Math.floor((pageHeight - marginY * 2 + gap) / (heightMm + gap));
     if (cols <= 0 || rows <= 0) {
