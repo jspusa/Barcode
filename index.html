@@ -227,13 +227,13 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             ctx.drawImage(
                 image,
                 0,
-                0,
+                sourceTopCropPx,
                 sourceWidth,
-                sourceHeight,
+                sourceHeight - sourceTopCropPx,
                 0,
-                -cropTopPx + verticalPushPx,
+                -cropTopPx + verticalPushPx + topWhitespacePx,
                 targetWidthPx,
-                scaledHeightPx
+                drawHeightPx
             );
             if (topTrimPx > 0) {
                 ctx.fillRect(0, 0, canvas.width, Math.min(canvas.height, topTrimPx));
