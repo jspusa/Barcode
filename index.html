@@ -103,6 +103,12 @@
                 <button type="button" onclick="adjustBottomInset(0.2)">＋</button>
                 <span style="font-size:12px;color:#718096;">（三段式分開調整）</span>
             </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>上下微調</span>
+                <button type="button" onclick="adjustVerticalOffset(-0.2)">上移</button>
+                <span id="barcode-vertical-offset-display">0.6 mm</span>
+                <button type="button" onclick="adjustVerticalOffset(0.2)">下移</button>
+            </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
                 目前可排版：<span id="layout-count-preview">0 欄 × 0 列</span>
             </div>
@@ -213,6 +219,8 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             const scaledHeightPx = Math.round((sourceHeight / sourceWidth) * targetWidthPx);
             const cropHeightPx = Math.round((targetHeightMm / targetWidthMm) * targetWidthPx);
             const cropTopPx = Math.max(0, scaledHeightPx - cropHeightPx);
+            const pxPerMm = targetWidthPx / targetWidthMm;
+            const verticalOffsetPx = Math.round(barcodeVerticalOffsetMm * pxPerMm);
             const canvas = document.createElement('canvas');
             canvas.width = targetWidthPx;
             canvas.height = cropHeightPx;
@@ -226,7 +234,7 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
                 sourceWidth,
                 sourceHeight,
                 0,
-                -cropTopPx,
+                -cropTopPx + verticalOffsetPx,
                 targetWidthPx,
                 scaledHeightPx
             );
@@ -454,6 +462,12 @@ function adjustBottomInset(delta) {
     bottomInsetMm = Math.round(Math.min(maxBottom, Math.max(0, bottomInsetMm + delta)) * 10) / 10;
     updatePaddingDisplays();
     renderLabelPreview();
+}
+function adjustVerticalOffset(delta) {
+    const nextOffset = Math.min(3, Math.max(-3, barcodeVerticalOffsetMm + delta));
+    barcodeVerticalOffsetMm = Math.round(nextOffset * 10) / 10;
+    updateVerticalOffsetDisplay();
+    refreshPreviewBarcodePng();
 }
 function onLabelSettingsChanged() {
     const label = getValidatedLabelSize();
