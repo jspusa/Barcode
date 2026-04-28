@@ -151,6 +151,13 @@ function generateBarcode() {
     const serializer = new XMLSerializer();
     refreshPreviewBarcodePng();
     const svg = document.getElementById('barcode');
+    const label = getValidatedLabelSize(true);
+    if (label) {
+        svgToCroppedPngDataUrl(svg, label.widthMm, label.heightMm).then((pngDataUrl) => {
+            currentBarcodePngDataUrl = pngDataUrl;
+            renderLabelPreview();
+        });
+    }
     const url = URL.createObjectURL(new Blob([serializer.serializeToString(svg)], { type: 'image/svg+xml' }));
     const link = document.getElementById('download-link');
     link.href = url;
