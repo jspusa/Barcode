@@ -92,10 +92,16 @@
                 <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
             </div>
             <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span>整體下推</span>
+                <span>調整下緣</span>
                 <button type="button" onclick="adjustVerticalPush(-0.2)">減少</button>
                 <span id="barcode-vertical-offset-display">0.6 mm</span>
                 <button type="button" onclick="adjustVerticalPush(0.2)">增加</button>
+            </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>上方留白</span>
+                <button type="button" onclick="adjustTopWhitespace(-0.2)">減少</button>
+                <span id="barcode-top-whitespace-display">0.0 mm</span>
+                <button type="button" onclick="adjustTopWhitespace(0.2)">增加</button>
             </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
                 目前可排版：<span id="layout-count-preview">0 欄 × 0 列</span>
@@ -122,13 +128,16 @@ const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
 const DEFAULT_INSET_MM = 0.8;
 const DEFAULT_VERTICAL_OFFSET_MM = 0.6;
+const DEFAULT_TOP_WHITESPACE_MM = 0;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
 let barcodeVerticalPushMm = DEFAULT_VERTICAL_OFFSET_MM;
+let barcodeTopWhitespaceMm = DEFAULT_TOP_WHITESPACE_MM;
 
 window.addEventListener('DOMContentLoaded', () => {
     updateInsetDisplay();
     updateVerticalOffsetDisplay();
+    updateTopWhitespaceDisplay();
     onLabelSettingsChanged();
 });
 function handleEnter(e) {
@@ -208,6 +217,10 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             const cropTopPx = Math.max(0, scaledHeightPx - cropHeightPx);
             const pxPerMm = targetWidthPx / targetWidthMm;
             const verticalPushPx = Math.round(barcodeVerticalPushMm * pxPerMm);
+            const topWhitespacePx = Math.round(barcodeTopWhitespaceMm * pxPerMm);
+            const scale = targetWidthPx / sourceWidth;
+            const sourceTopCropPx = Math.min(sourceHeight - 1, Math.max(0, Math.round(topWhitespacePx / scale)));
+            const drawHeightPx = Math.max(1, scaledHeightPx - topWhitespacePx);
             const canvas = document.createElement('canvas');
             canvas.width = targetWidthPx;
             canvas.height = cropHeightPx;
@@ -217,13 +230,13 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             ctx.drawImage(
                 image,
                 0,
-                0,
+                sourceTopCropPx,
                 sourceWidth,
-                sourceHeight,
+                sourceHeight - sourceTopCropPx,
                 0,
-                -cropTopPx + verticalPushPx,
+                -cropTopPx + verticalPushPx + topWhitespacePx,
                 targetWidthPx,
-                scaledHeightPx
+                drawHeightPx
             );
             URL.revokeObjectURL(svgUrl);
             resolve(canvas.toDataURL('image/png'));
@@ -409,6 +422,9 @@ function updateInsetDisplay() {
 function updateVerticalOffsetDisplay() {
     document.getElementById('barcode-vertical-offset-display').textContent = `${barcodeVerticalPushMm.toFixed(1)} mm`;
 }
+function updateTopWhitespaceDisplay() {
+    document.getElementById('barcode-top-whitespace-display').textContent = `${barcodeTopWhitespaceMm.toFixed(1)} mm`;
+}
 function getMaxInset(widthMm, heightMm) {
     return Math.max(0, Math.min(widthMm, heightMm) / 2 - 0.5);
 }
@@ -427,6 +443,12 @@ function adjustVerticalPush(delta) {
     const nextPush = Math.min(6, Math.max(0, barcodeVerticalPushMm + delta));
     barcodeVerticalPushMm = Math.round(nextPush * 10) / 10;
     updateVerticalOffsetDisplay();
+    refreshPreviewBarcodePng();
+}
+function adjustTopWhitespace(delta) {
+    const nextWhitespace = Math.min(4, Math.max(0, barcodeTopWhitespaceMm + delta));
+    barcodeTopWhitespaceMm = Math.round(nextWhitespace * 10) / 10;
+    updateTopWhitespaceDisplay();
     refreshPreviewBarcodePng();
 }
 function onLabelSettingsChanged() {
