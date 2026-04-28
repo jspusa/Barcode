@@ -91,6 +91,12 @@
                 <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
                 <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
             </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>上下微調</span>
+                <button type="button" onclick="adjustVerticalOffset(-0.2)">上移</button>
+                <span id="barcode-vertical-offset-display">0.6 mm</span>
+                <button type="button" onclick="adjustVerticalOffset(0.2)">下移</button>
+            </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
                 目前可排版：<span id="layout-count-preview">0 欄 × 0 列</span>
             </div>
@@ -115,11 +121,14 @@
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
 const DEFAULT_INSET_MM = 0.8;
+const DEFAULT_VERTICAL_OFFSET_MM = 0.6;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
+let barcodeVerticalOffsetMm = DEFAULT_VERTICAL_OFFSET_MM;
 
 window.addEventListener('DOMContentLoaded', () => {
     updateInsetDisplay();
+    updateVerticalOffsetDisplay();
     onLabelSettingsChanged();
 });
 function handleEnter(e) {
@@ -197,6 +206,8 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             const scaledHeightPx = Math.round((sourceHeight / sourceWidth) * targetWidthPx);
             const cropHeightPx = Math.round((targetHeightMm / targetWidthMm) * targetWidthPx);
             const cropTopPx = Math.max(0, scaledHeightPx - cropHeightPx);
+            const pxPerMm = targetWidthPx / targetWidthMm;
+            const verticalOffsetPx = Math.round(barcodeVerticalOffsetMm * pxPerMm);
             const canvas = document.createElement('canvas');
             canvas.width = targetWidthPx;
             canvas.height = cropHeightPx;
@@ -210,7 +221,7 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
                 sourceWidth,
                 sourceHeight,
                 0,
-                -cropTopPx,
+                -cropTopPx + verticalOffsetPx,
                 targetWidthPx,
                 scaledHeightPx
             );
@@ -395,6 +406,9 @@ function refreshPreviewBarcodePng() {
 function updateInsetDisplay() {
     document.getElementById('barcode-inset-display').textContent = `${barcodeInsetMm.toFixed(1)} mm`;
 }
+function updateVerticalOffsetDisplay() {
+    document.getElementById('barcode-vertical-offset-display').textContent = `${barcodeVerticalOffsetMm.toFixed(1)} mm`;
+}
 function getMaxInset(widthMm, heightMm) {
     return Math.max(0, Math.min(widthMm, heightMm) / 2 - 0.5);
 }
@@ -408,6 +422,12 @@ function adjustBarcodeInset(delta) {
     barcodeInsetMm = Math.round(nextInset * 10) / 10;
     updateInsetDisplay();
     renderLabelPreview();
+}
+function adjustVerticalOffset(delta) {
+    const nextOffset = Math.min(3, Math.max(-3, barcodeVerticalOffsetMm + delta));
+    barcodeVerticalOffsetMm = Math.round(nextOffset * 10) / 10;
+    updateVerticalOffsetDisplay();
+    refreshPreviewBarcodePng();
 }
 function onLabelSettingsChanged() {
     const label = getValidatedLabelSize();
