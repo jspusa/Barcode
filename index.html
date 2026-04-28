@@ -115,7 +115,6 @@
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
 const DEFAULT_INSET_MM = 0.8;
-const MIXED_LAYOUT_GAP_MM = 0.6;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
 
@@ -380,12 +379,11 @@ function getLayoutPlan(widthMm, heightMm) {
     if (portraitCols > 0 && portraitRows > 0) {
         const usedWidth = portraitCols * widthMm;
         const remainWidth = PAGE_WIDTH_MM - usedWidth;
-        if (remainWidth > MIXED_LAYOUT_GAP_MM + heightMm) {
-            const laneWidth = remainWidth - MIXED_LAYOUT_GAP_MM;
-            landscapeCols = Math.floor(laneWidth / heightMm);
+        if (remainWidth >= heightMm) {
+            landscapeCols = Math.floor(remainWidth / heightMm);
             landscapeRows = Math.floor(PAGE_HEIGHT_MM / widthMm);
             if (landscapeCols > 0 && landscapeRows > 0) {
-                landscapeStartX = usedWidth + MIXED_LAYOUT_GAP_MM;
+                landscapeStartX = PAGE_WIDTH_MM - landscapeCols * heightMm;
             } else {
                 landscapeCols = 0;
                 landscapeRows = 0;
