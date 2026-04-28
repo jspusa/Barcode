@@ -85,11 +85,23 @@
                 <input id="label-height-mm" type="number" min="5" max="152" step="0.1" placeholder="例如 11" value="11" style="width:90px;margin:0;" oninput="onLabelSettingsChanged()" />
             </div>
             <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                <span>條碼內縮</span>
-                <button type="button" onclick="adjustBarcodeInset(0.2)">－</button>
-                <span id="barcode-inset-display">0.8 mm</span>
-                <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
-                <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
+                <span>上緣</span>
+                <button type="button" onclick="adjustTopInset(-0.2)">－</button>
+                <span id="top-inset-display">0.6 mm</span>
+                <button type="button" onclick="adjustTopInset(0.2)">＋</button>
+            </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>左右窄度</span>
+                <button type="button" onclick="adjustSideInset(-0.2)">－</button>
+                <span id="side-inset-display">0.8 mm</span>
+                <button type="button" onclick="adjustSideInset(0.2)">＋</button>
+            </div>
+            <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                <span>下緣</span>
+                <button type="button" onclick="adjustBottomInset(-0.2)">－</button>
+                <span id="bottom-inset-display">0.0 mm</span>
+                <button type="button" onclick="adjustBottomInset(0.2)">＋</button>
+                <span style="font-size:12px;color:#718096;">（三段式分開調整）</span>
             </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
                 目前可排版：<span id="layout-count-preview">0 欄 × 0 列</span>
@@ -114,12 +126,16 @@
 <script>
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
-const DEFAULT_INSET_MM = 0.8;
+const DEFAULT_SIDE_INSET_MM = 0.8;
+const DEFAULT_TOP_INSET_MM = 0.6;
+const DEFAULT_BOTTOM_INSET_MM = 0;
 let currentBarcodePngDataUrl = '';
-let barcodeInsetMm = DEFAULT_INSET_MM;
+let topInsetMm = DEFAULT_TOP_INSET_MM;
+let sideInsetMm = DEFAULT_SIDE_INSET_MM;
+let bottomInsetMm = DEFAULT_BOTTOM_INSET_MM;
 
 window.addEventListener('DOMContentLoaded', () => {
-    updateInsetDisplay();
+    updatePaddingDisplays();
     onLabelSettingsChanged();
 });
 function handleEnter(e) {
@@ -256,10 +272,9 @@ async function downloadLabelPdf() {
     });
     pdf.setDrawColor(0, 0, 0);
     pdf.setLineWidth(0.2);
-    const maxInset = getMaxInset(barcodeWidth, barcodeHeight);
-    const safeInset = Math.min(Math.max(barcodeInsetMm, 0), maxInset);
-    const imageWidth = Math.max(1, barcodeWidth - safeInset * 2);
-    const imageHeight = Math.max(1, barcodeHeight - safeInset * 2);
+    const portraitPadding = getSafePaddingValues(barcodeWidth, barcodeHeight);
+    const imageWidth = Math.max(1, barcodeWidth - portraitPadding.side * 2);
+    const imageHeight = Math.max(1, barcodeHeight - portraitPadding.top - portraitPadding.bottom);
     const normalImageSize = await getImageSizeFromDataUrl(pngDataUrl);
     const normalPlacement = getContainPlacement(
         normalImageSize.width,
@@ -274,8 +289,8 @@ async function downloadLabelPdf() {
             pdf.addImage(
                 pngDataUrl,
                 'PNG',
-                x + safeInset + normalPlacement.offsetX,
-                y + safeInset + normalPlacement.offsetY,
+                x + portraitPadding.side + normalPlacement.offsetX,
+                y + portraitPadding.top + normalPlacement.offsetY,
                 normalPlacement.drawWidth,
                 normalPlacement.drawHeight,
                 undefined,
@@ -288,8 +303,9 @@ async function downloadLabelPdf() {
         const rotatedPngDataUrl = await rotatePngDataUrl90(pngDataUrl);
         const rotatedWidth = barcodeHeight;
         const rotatedHeight = barcodeWidth;
-        const rotatedImageWidth = Math.max(1, rotatedWidth - safeInset * 2);
-        const rotatedImageHeight = Math.max(1, rotatedHeight - safeInset * 2);
+        const landscapePadding = getSafePaddingValues(rotatedWidth, rotatedHeight);
+        const rotatedImageWidth = Math.max(1, rotatedWidth - landscapePadding.side * 2);
+        const rotatedImageHeight = Math.max(1, rotatedHeight - landscapePadding.top - landscapePadding.bottom);
         const rotatedImageSize = await getImageSizeFromDataUrl(rotatedPngDataUrl);
         const rotatedPlacement = getContainPlacement(
             rotatedImageSize.width,
@@ -304,8 +320,8 @@ async function downloadLabelPdf() {
                 pdf.addImage(
                     rotatedPngDataUrl,
                     'PNG',
-                    x + safeInset + rotatedPlacement.offsetX,
-                    y + safeInset + rotatedPlacement.offsetY,
+                    x + landscapePadding.side + rotatedPlacement.offsetX,
+                    y + landscapePadding.top + rotatedPlacement.offsetY,
                     rotatedPlacement.drawWidth,
                     rotatedPlacement.drawHeight,
                     undefined,
@@ -392,21 +408,51 @@ function refreshPreviewBarcodePng() {
             renderLabelPreview();
         });
 }
-function updateInsetDisplay() {
-    document.getElementById('barcode-inset-display').textContent = `${barcodeInsetMm.toFixed(1)} mm`;
+function updatePaddingDisplays() {
+    document.getElementById('top-inset-display').textContent = `${topInsetMm.toFixed(1)} mm`;
+    document.getElementById('side-inset-display').textContent = `${sideInsetMm.toFixed(1)} mm`;
+    document.getElementById('bottom-inset-display').textContent = `${bottomInsetMm.toFixed(1)} mm`;
 }
-function getMaxInset(widthMm, heightMm) {
-    return Math.max(0, Math.min(widthMm, heightMm) / 2 - 0.5);
+function getMaxSideInset(widthMm) {
+    return Math.max(0, widthMm / 2 - 0.5);
 }
-function adjustBarcodeInset(delta) {
+function getMaxVerticalInset(heightMm, otherInsetMm) {
+    return Math.max(0, heightMm - otherInsetMm - 1);
+}
+function getSafePaddingValues(widthMm, heightMm) {
+    const safeSide = Math.min(Math.max(sideInsetMm, 0), getMaxSideInset(widthMm));
+    const safeTop = Math.min(Math.max(topInsetMm, 0), getMaxVerticalInset(heightMm, bottomInsetMm));
+    const safeBottom = Math.min(Math.max(bottomInsetMm, 0), getMaxVerticalInset(heightMm, safeTop));
+    return { top: safeTop, side: safeSide, bottom: safeBottom };
+}
+function adjustTopInset(delta) {
     const label = getValidatedLabelSize();
     if (!label) {
         return;
     }
-    const maxInset = getMaxInset(label.widthMm, label.heightMm);
-    const nextInset = Math.min(maxInset, Math.max(0, barcodeInsetMm + delta));
-    barcodeInsetMm = Math.round(nextInset * 10) / 10;
-    updateInsetDisplay();
+    const maxTop = getMaxVerticalInset(label.heightMm, bottomInsetMm);
+    topInsetMm = Math.round(Math.min(maxTop, Math.max(0, topInsetMm + delta)) * 10) / 10;
+    updatePaddingDisplays();
+    renderLabelPreview();
+}
+function adjustSideInset(delta) {
+    const label = getValidatedLabelSize();
+    if (!label) {
+        return;
+    }
+    const maxSide = getMaxSideInset(label.widthMm);
+    sideInsetMm = Math.round(Math.min(maxSide, Math.max(0, sideInsetMm + delta)) * 10) / 10;
+    updatePaddingDisplays();
+    renderLabelPreview();
+}
+function adjustBottomInset(delta) {
+    const label = getValidatedLabelSize();
+    if (!label) {
+        return;
+    }
+    const maxBottom = getMaxVerticalInset(label.heightMm, topInsetMm);
+    bottomInsetMm = Math.round(Math.min(maxBottom, Math.max(0, bottomInsetMm + delta)) * 10) / 10;
+    updatePaddingDisplays();
     renderLabelPreview();
 }
 function onLabelSettingsChanged() {
@@ -423,11 +469,11 @@ function onLabelSettingsChanged() {
     } else {
         layoutEl.textContent = `${plan.portraitCols} 欄 × ${plan.portraitRows} 列（總共 ${plan.totalCount} 張）`;
     }
-    const maxInset = getMaxInset(label.widthMm, label.heightMm);
-    if (barcodeInsetMm > maxInset) {
-        barcodeInsetMm = Math.round(maxInset * 10) / 10;
-        updateInsetDisplay();
-    }
+    const safePadding = getSafePaddingValues(label.widthMm, label.heightMm);
+    topInsetMm = Math.round(safePadding.top * 10) / 10;
+    sideInsetMm = Math.round(safePadding.side * 10) / 10;
+    bottomInsetMm = Math.round(safePadding.bottom * 10) / 10;
+    updatePaddingDisplays();
     refreshPreviewBarcodePng();
 }
 function getLayoutPlan(widthMm, heightMm) {
@@ -474,9 +520,16 @@ function renderLabelPreview() {
     const boxHeightPx = Math.round(label.heightMm * pxPerMm);
     previewBox.style.width = `${boxWidthPx}px`;
     previewBox.style.height = `${boxHeightPx}px`;
-    const insetPx = Math.round(barcodeInsetMm * pxPerMm);
-    previewContent.style.width = `${Math.max(6, boxWidthPx - insetPx * 2)}px`;
-    previewContent.style.height = `${Math.max(6, boxHeightPx - insetPx * 2)}px`;
+    previewBox.style.position = 'relative';
+    const safePadding = getSafePaddingValues(label.widthMm, label.heightMm);
+    const sideInsetPx = Math.round(safePadding.side * pxPerMm);
+    const topInsetPx = Math.round(safePadding.top * pxPerMm);
+    const bottomInsetPx = Math.round(safePadding.bottom * pxPerMm);
+    previewContent.style.position = 'absolute';
+    previewContent.style.left = `${sideInsetPx}px`;
+    previewContent.style.top = `${topInsetPx}px`;
+    previewContent.style.width = `${Math.max(6, boxWidthPx - sideInsetPx * 2)}px`;
+    previewContent.style.height = `${Math.max(6, boxHeightPx - topInsetPx - bottomInsetPx)}px`;
     if (!currentBarcodePngDataUrl) {
         placeholder.textContent = '先按「產生條碼」';
         placeholder.style.display = 'block';
