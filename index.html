@@ -206,6 +206,8 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
             const scaledHeightPx = Math.round((sourceHeight / sourceWidth) * targetWidthPx);
             const cropHeightPx = Math.round((targetHeightMm / targetWidthMm) * targetWidthPx);
             const cropTopPx = Math.max(0, scaledHeightPx - cropHeightPx);
+            const pxPerMm = targetWidthPx / targetWidthMm;
+            const verticalPushPx = Math.round(barcodeVerticalPushMm * pxPerMm);
             const canvas = document.createElement('canvas');
             canvas.width = targetWidthPx;
             canvas.height = cropHeightPx;
@@ -219,7 +221,7 @@ function svgToCroppedPngDataUrl(svg, targetWidthMm, targetHeightMm) {
                 sourceWidth,
                 sourceHeight,
                 0,
-                -cropTopPx,
+                -cropTopPx + verticalPushPx,
                 targetWidthPx,
                 scaledHeightPx
             );
@@ -276,7 +278,6 @@ async function downloadLabelPdf() {
         imageWidth,
         imageHeight
     );
-    const normalVerticalShift = getVerticalShiftMm(imageHeight, normalPlacement.drawHeight);
     for (let row = 0; row < layoutPlan.portraitRows; row++) {
         for (let col = 0; col < layoutPlan.portraitCols; col++) {
             const x = marginX + col * barcodeWidth;
@@ -285,7 +286,7 @@ async function downloadLabelPdf() {
                 pngDataUrl,
                 'PNG',
                 x + safeInset + normalPlacement.offsetX,
-                y + safeInset + normalPlacement.offsetY + normalVerticalShift,
+                y + safeInset + normalPlacement.offsetY,
                 normalPlacement.drawWidth,
                 normalPlacement.drawHeight,
                 undefined,
@@ -307,7 +308,6 @@ async function downloadLabelPdf() {
             rotatedImageWidth,
             rotatedImageHeight
         );
-        const rotatedVerticalShift = getVerticalShiftMm(rotatedImageHeight, rotatedPlacement.drawHeight);
         for (let row = 0; row < layoutPlan.landscapeRows; row++) {
             for (let col = 0; col < layoutPlan.landscapeCols; col++) {
                 const x = layoutPlan.landscapeStartX + col * rotatedWidth;
@@ -316,7 +316,7 @@ async function downloadLabelPdf() {
                     rotatedPngDataUrl,
                     'PNG',
                     x + safeInset + rotatedPlacement.offsetX,
-                    y + safeInset + rotatedPlacement.offsetY + rotatedVerticalShift,
+                    y + safeInset + rotatedPlacement.offsetY,
                     rotatedPlacement.drawWidth,
                     rotatedPlacement.drawHeight,
                     undefined,
@@ -371,11 +371,6 @@ function getContainPlacement(sourceWidth, sourceHeight, boxWidth, boxHeight) {
         offsetX: (boxWidth - drawWidth) / 2,
         offsetY: (boxHeight - drawHeight) / 2
     };
-}
-function getVerticalShiftMm(containerHeight, drawHeight) {
-    const freeSpace = Math.max(0, containerHeight - drawHeight);
-    const maxShift = freeSpace / 2;
-    return Math.min(maxShift, Math.max(-maxShift, barcodeVerticalOffsetMm));
 }
 function getValidatedLabelSize(showAlert = false) {
     const widthMm = parseFloat(document.getElementById('label-width-mm').value);
@@ -432,7 +427,7 @@ function adjustVerticalPush(delta) {
     const nextPush = Math.min(6, Math.max(0, barcodeVerticalPushMm + delta));
     barcodeVerticalPushMm = Math.round(nextPush * 10) / 10;
     updateVerticalOffsetDisplay();
-    renderLabelPreview();
+    refreshPreviewBarcodePng();
 }
 function onLabelSettingsChanged() {
     const label = getValidatedLabelSize();
@@ -500,11 +495,8 @@ function renderLabelPreview() {
     previewBox.style.width = `${boxWidthPx}px`;
     previewBox.style.height = `${boxHeightPx}px`;
     const insetPx = Math.round(barcodeInsetMm * pxPerMm);
-    const contentWidthPx = Math.max(6, boxWidthPx - insetPx * 2);
-    const contentHeightPx = Math.max(6, boxHeightPx - insetPx * 2);
-    previewContent.style.width = `${contentWidthPx}px`;
-    previewContent.style.height = `${contentHeightPx}px`;
-    previewContent.style.transform = `translateY(${Math.round(barcodeVerticalOffsetMm * pxPerMm)}px)`;
+    previewContent.style.width = `${Math.max(6, boxWidthPx - insetPx * 2)}px`;
+    previewContent.style.height = `${Math.max(6, boxHeightPx - insetPx * 2)}px`;
     if (!currentBarcodePngDataUrl) {
         placeholder.textContent = '先按「產生條碼」';
         placeholder.style.display = 'block';
