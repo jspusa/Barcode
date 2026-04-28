@@ -86,9 +86,9 @@
             </div>
             <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span>條碼內縮</span>
-                <button type="button" onclick="adjustBarcodeInset(0.2)">－</button>
-                <span id="barcode-inset-display">0.8 mm</span>
-                <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
+                <button type="button" onclick="adjustBarcodeInset(0.1)">－</button>
+                <span id="barcode-inset-display">0.5 mm</span>
+                <button type="button" onclick="adjustBarcodeInset(-0.1)">＋</button>
                 <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
             </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:10px;">
@@ -114,9 +114,9 @@
 <script>
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
-const DEFAULT_INSET_MM = 0.8;
+const DEFAULT_INSET_MM = 0.5;
 const FIXED_VERTICAL_OFFSET_MM = 0.6;
-const FIXED_TOP_WHITESPACE_MM = 0;
+const FIXED_TOP_WHITESPACE_MM = 0.5;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
 
