@@ -87,7 +87,7 @@
             <div style="margin-bottom: 10px;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                 <span>條碼內縮</span>
                 <button type="button" onclick="adjustBarcodeInset(0.2)">－</button>
-                <span id="barcode-inset-display">0.6 mm</span>
+                <span id="barcode-inset-display">0.8 mm</span>
                 <button type="button" onclick="adjustBarcodeInset(-0.2)">＋</button>
                 <span style="font-size:12px;color:#718096;">（預設 11 x 35）</span>
             </div>
@@ -99,8 +99,8 @@
             </div>
             <div style="font-size:12px;color:#4a5568;margin-bottom:6px;">預覽（外框為貼紙尺寸）</div>
             <div id="label-preview-shell" style="border:1px dashed #a0aec0;background:#f7fafc;padding:12px;width:max-content;">
-                <div id="label-preview-box" style="width:210px;height:66px;background:#fff;border:1px solid #2d3748;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative;">
-                    <div id="label-preview-content" style="display:flex;align-items:center;justify-content:center;position:absolute;">
+                <div id="label-preview-box" style="width:210px;height:66px;background:#fff;border:1px solid #2d3748;display:flex;align-items:center;justify-content:center;overflow:hidden;">
+                    <div id="label-preview-content" style="display:flex;align-items:center;justify-content:center;">
                         <img id="label-preview-image" alt="條碼預覽" style="width:100%;height:100%;object-fit:contain;display:none;" />
                     </div>
                     <span id="label-preview-placeholder" style="font-size:12px;color:#a0aec0;">先按「產生條碼」</span>
@@ -114,7 +114,7 @@
 <script>
 const PAGE_WIDTH_MM = 102;
 const PAGE_HEIGHT_MM = 152;
-const DEFAULT_INSET_MM = 0.6;
+const DEFAULT_INSET_MM = 0.8;
 let currentBarcodePngDataUrl = '';
 let barcodeInsetMm = DEFAULT_INSET_MM;
 
@@ -258,9 +258,8 @@ async function downloadLabelPdf() {
     pdf.setLineWidth(0.2);
     const maxInset = getMaxInset(barcodeWidth, barcodeHeight);
     const safeInset = Math.min(Math.max(barcodeInsetMm, 0), maxInset);
-    const insets = getBarcodeInsetsMm(safeInset, barcodeWidth, barcodeHeight);
-    const imageWidth = Math.max(1, barcodeWidth - insets.left - insets.right);
-    const imageHeight = Math.max(1, barcodeHeight - insets.top - insets.bottom);
+    const imageWidth = Math.max(1, barcodeWidth - safeInset * 2);
+    const imageHeight = Math.max(1, barcodeHeight - safeInset * 2);
     const normalImageSize = await getImageSizeFromDataUrl(pngDataUrl);
     const normalPlacement = getContainPlacement(
         normalImageSize.width,
@@ -275,8 +274,8 @@ async function downloadLabelPdf() {
             pdf.addImage(
                 pngDataUrl,
                 'PNG',
-                x + insets.left + normalPlacement.offsetX,
-                y + insets.top + normalPlacement.offsetY,
+                x + safeInset + normalPlacement.offsetX,
+                y + safeInset + normalPlacement.offsetY,
                 normalPlacement.drawWidth,
                 normalPlacement.drawHeight,
                 undefined,
@@ -289,9 +288,8 @@ async function downloadLabelPdf() {
         const rotatedPngDataUrl = await rotatePngDataUrl90(pngDataUrl);
         const rotatedWidth = barcodeHeight;
         const rotatedHeight = barcodeWidth;
-        const rotatedInsets = getBarcodeInsetsMm(safeInset, rotatedWidth, rotatedHeight);
-        const rotatedImageWidth = Math.max(1, rotatedWidth - rotatedInsets.left - rotatedInsets.right);
-        const rotatedImageHeight = Math.max(1, rotatedHeight - rotatedInsets.top - rotatedInsets.bottom);
+        const rotatedImageWidth = Math.max(1, rotatedWidth - safeInset * 2);
+        const rotatedImageHeight = Math.max(1, rotatedHeight - safeInset * 2);
         const rotatedImageSize = await getImageSizeFromDataUrl(rotatedPngDataUrl);
         const rotatedPlacement = getContainPlacement(
             rotatedImageSize.width,
@@ -306,8 +304,8 @@ async function downloadLabelPdf() {
                 pdf.addImage(
                     rotatedPngDataUrl,
                     'PNG',
-                    x + rotatedInsets.left + rotatedPlacement.offsetX,
-                    y + rotatedInsets.top + rotatedPlacement.offsetY,
+                    x + safeInset + rotatedPlacement.offsetX,
+                    y + safeInset + rotatedPlacement.offsetY,
                     rotatedPlacement.drawWidth,
                     rotatedPlacement.drawHeight,
                     undefined,
@@ -361,28 +359,6 @@ function getContainPlacement(sourceWidth, sourceHeight, boxWidth, boxHeight) {
         drawHeight,
         offsetX: (boxWidth - drawWidth) / 2,
         offsetY: (boxHeight - drawHeight) / 2
-    };
-}
-function getBarcodeInsetsMm(baseInsetMm, labelWidthMm, labelHeightMm) {
-    const sideInset = Math.max(0, baseInsetMm);
-    const topInset = Math.max(0.3, 0.9 - baseInsetMm * 0.5);
-    const bottomInset = Math.max(0.3, baseInsetMm + 0.2);
-    const maxHorizontal = Math.max(0, labelWidthMm / 2 - 0.5);
-    const maxVertical = Math.max(0, labelHeightMm - 1);
-    const clampedSide = Math.min(sideInset, maxHorizontal);
-    const totalVertical = topInset + bottomInset;
-    let finalTop = topInset;
-    let finalBottom = bottomInset;
-    if (totalVertical > maxVertical) {
-        const scale = maxVertical / totalVertical;
-        finalTop *= scale;
-        finalBottom *= scale;
-    }
-    return {
-        left: clampedSide,
-        right: clampedSide,
-        top: finalTop,
-        bottom: finalBottom
     };
 }
 function getValidatedLabelSize(showAlert = false) {
@@ -498,16 +474,9 @@ function renderLabelPreview() {
     const boxHeightPx = Math.round(label.heightMm * pxPerMm);
     previewBox.style.width = `${boxWidthPx}px`;
     previewBox.style.height = `${boxHeightPx}px`;
-    const safeInset = Math.min(Math.max(barcodeInsetMm, 0), getMaxInset(label.widthMm, label.heightMm));
-    const insets = getBarcodeInsetsMm(safeInset, label.widthMm, label.heightMm);
-    const leftPx = Math.round(insets.left * pxPerMm);
-    const topPx = Math.round(insets.top * pxPerMm);
-    const rightPx = Math.round(insets.right * pxPerMm);
-    const bottomPx = Math.round(insets.bottom * pxPerMm);
-    previewContent.style.left = `${leftPx}px`;
-    previewContent.style.top = `${topPx}px`;
-    previewContent.style.width = `${Math.max(6, boxWidthPx - leftPx - rightPx)}px`;
-    previewContent.style.height = `${Math.max(6, boxHeightPx - topPx - bottomPx)}px`;
+    const insetPx = Math.round(barcodeInsetMm * pxPerMm);
+    previewContent.style.width = `${Math.max(6, boxWidthPx - insetPx * 2)}px`;
+    previewContent.style.height = `${Math.max(6, boxHeightPx - insetPx * 2)}px`;
     if (!currentBarcodePngDataUrl) {
         placeholder.textContent = '先按「產生條碼」';
         placeholder.style.display = 'block';
