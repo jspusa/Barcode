@@ -149,6 +149,7 @@ function generateBarcode() {
     }
     renderBarcode(input);
     const serializer = new XMLSerializer();
+    refreshPreviewBarcodePng();
     const svg = document.getElementById('barcode');
     const label = getValidatedLabelSize(true);
     if (label) {
@@ -332,6 +333,26 @@ function getValidatedLabelSize(showAlert = false) {
     }
     return { widthMm, heightMm };
 }
+function refreshPreviewBarcodePng() {
+    const input = getBarcodeValue();
+    const label = getValidatedLabelSize();
+    if (!input || !label) {
+        currentBarcodePngDataUrl = '';
+        renderLabelPreview();
+        return;
+    }
+    renderBarcode(input);
+    const svg = document.getElementById('barcode');
+    svgToCroppedPngDataUrl(svg, label.widthMm, label.heightMm)
+        .then((pngDataUrl) => {
+            currentBarcodePngDataUrl = pngDataUrl;
+            renderLabelPreview();
+        })
+        .catch(() => {
+            currentBarcodePngDataUrl = '';
+            renderLabelPreview();
+        });
+}
 function updateInsetDisplay() {
     document.getElementById('barcode-inset-display').textContent = `${barcodeInsetMm.toFixed(1)} mm`;
 }
@@ -368,7 +389,7 @@ function onLabelSettingsChanged() {
         barcodeInsetMm = Math.round(maxInset * 10) / 10;
         updateInsetDisplay();
     }
-    renderLabelPreview();
+    refreshPreviewBarcodePng();
 }
 function getLayoutPlan(widthMm, heightMm) {
     const portraitCols = Math.floor(PAGE_WIDTH_MM / widthMm);
