@@ -100,7 +100,9 @@
             <div style="font-size:12px;color:#4a5568;margin-bottom:6px;">預覽（外框為貼紙尺寸）</div>
             <div id="label-preview-shell" style="border:1px dashed #a0aec0;background:#f7fafc;padding:12px;width:max-content;">
                 <div id="label-preview-box" style="width:210px;height:66px;background:#fff;border:1px solid #2d3748;display:flex;align-items:center;justify-content:center;overflow:hidden;">
-                    <img id="label-preview-image" alt="條碼預覽" style="max-width:100%;max-height:100%;object-fit:contain;display:none;" />
+                    <div id="label-preview-content" style="display:flex;align-items:center;justify-content:center;">
+                        <img id="label-preview-image" alt="條碼預覽" style="width:100%;height:100%;object-fit:contain;display:none;" />
+                    </div>
                     <span id="label-preview-placeholder" style="font-size:12px;color:#a0aec0;">先按「產生條碼」</span>
                 </div>
             </div>
@@ -326,6 +328,7 @@ function onLabelSettingsChanged() {
 }
 function renderLabelPreview() {
     const previewBox = document.getElementById('label-preview-box');
+    const previewContent = document.getElementById('label-preview-content');
     const previewImage = document.getElementById('label-preview-image');
     const placeholder = document.getElementById('label-preview-placeholder');
     const label = getValidatedLabelSize();
@@ -333,20 +336,26 @@ function renderLabelPreview() {
         placeholder.textContent = '請輸入有效寬高';
         placeholder.style.display = 'block';
         previewImage.style.display = 'none';
+        previewContent.style.display = 'none';
         return;
     }
     const pxPerMm = 6;
-    previewBox.style.width = `${Math.round(label.widthMm * pxPerMm)}px`;
-    previewBox.style.height = `${Math.round(label.heightMm * pxPerMm)}px`;
+    const boxWidthPx = Math.round(label.widthMm * pxPerMm);
+    const boxHeightPx = Math.round(label.heightMm * pxPerMm);
+    previewBox.style.width = `${boxWidthPx}px`;
+    previewBox.style.height = `${boxHeightPx}px`;
     const insetPx = Math.round(barcodeInsetMm * pxPerMm);
-    previewImage.style.padding = `${insetPx}px`;
+    previewContent.style.width = `${Math.max(6, boxWidthPx - insetPx * 2)}px`;
+    previewContent.style.height = `${Math.max(6, boxHeightPx - insetPx * 2)}px`;
     if (!currentBarcodePngDataUrl) {
         placeholder.textContent = '先按「產生條碼」';
         placeholder.style.display = 'block';
         previewImage.style.display = 'none';
+        previewContent.style.display = 'none';
         return;
     }
     previewImage.src = currentBarcodePngDataUrl;
+    previewContent.style.display = 'flex';
     previewImage.style.display = 'block';
     placeholder.style.display = 'none';
 }
